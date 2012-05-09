@@ -46,7 +46,7 @@
 
 %% Instrumented functions called as erlang:FUNCTION.
 -define(INSTR_ERL_MOD_FUN,
-	[{erlang, send, 2}, {erlang, send, 3}] ++ 
+	[{erlang, send, 2}, {erlang, send, 3}] ++
 	[{erlang, F, A} || {F, A} <- ?INSTR_ERL_FUN]).
 
 %% Instrumented mod:fun.
@@ -91,12 +91,23 @@ instrument_and_compile_aux([File|Rest], Acc) ->
 	Result -> instrument_and_compile_aux(Rest, [Result|Acc])
     end.
 
+user_options(File) ->
+    OptsFile = filename:join(filename:dirname(File), "compile.options"),
+    case filelib:is_regular(OptsFile) of
+        true    -> file:consult(OptsFile);
+        false   -> false
+    end.
+
 %% Instrument and compile a single file.
 instrument_and_compile_one(File) ->
     %% Compilation of original file without emitting code, just to show
     %% warnings or stop if an error is found, before instrumenting it.
     log:log("Validating file ~p...~n", [File]),
-    PreOptions = [strong_validation, verbose, return],
+    UserOptions = case user_options(File) of
+                      false      -> [];
+                      {ok, Opts} -> Opts
+                  end,
+    PreOptions = UserOptions ++ [strong_validation, verbose, return],
     case compile:file(File, PreOptions) of
 	{ok, Module, Warnings} ->
 	    %% Log warning messages.
@@ -253,8 +264,8 @@ has_atoms_only(Tree) ->
     IsAtom(Tree) orelse
       (Type =:= qualified_name andalso
        lists:all(IsAtom, erl_syntax:qualified_name_segments(Tree))).
-		       
-			       
+
+
 %% Determine whether an auto-exported BIF call needs instrumentation.
 needs_instrument(Function, ArgTrees) ->
     Arity = length(ArgTrees),
